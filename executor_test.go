@@ -6,7 +6,7 @@ import (
 )
 
 func TestFixedSizeThreadPoolExecutorSubmitPoolSize1(t *testing.T) {
-    executor := NewFixedSizeThreadPoolExecutor(1)
+    executor := NewFixedSizeThreadPoolExecutor[interface{}](1)
     var atomicBool atomic.Bool
     startChannel := make(chan byte)
     executor.Submit(func() {
@@ -23,7 +23,7 @@ func TestFixedSizeThreadPoolExecutorSubmitPoolSize1(t *testing.T) {
 }
 
 func TestFixedSizeThreadPoolExecutorSubmitPoolSize2(t *testing.T) {
-    executor := NewFixedSizeThreadPoolExecutor(2)
+    executor := NewFixedSizeThreadPoolExecutor[interface{}](2)
     startChannel := make(chan byte)
     executor.Submit(func() {
         startChannel <- byte(0)
@@ -35,7 +35,7 @@ func TestFixedSizeThreadPoolExecutorSubmitPoolSize2(t *testing.T) {
 }
 
 func TestFixedSizeThreadPoolExecutorInvokePoolSize1(t *testing.T) {
-    executor := NewFixedSizeThreadPoolExecutor(1)
+    executor := NewFixedSizeThreadPoolExecutor[interface{}](1)
     var atomicBool atomic.Bool
     startChannel := make(chan byte)
     result1Chan := executor.Invoke(func() interface{} {
@@ -69,7 +69,7 @@ func TestFixedSizeThreadPoolExecutorInvokePoolSize1(t *testing.T) {
 }
 
 func TestFixedSizeThreadPoolExecutorInvokePoolSize2(t *testing.T) {
-    executor := NewFixedSizeThreadPoolExecutor(2)
+    executor := NewFixedSizeThreadPoolExecutor[interface{}](2)
     startChannel := make(chan byte)
     result1Chan := executor.Invoke(func() interface{} {
         startChannel <- byte(0)
@@ -90,6 +90,53 @@ func TestFixedSizeThreadPoolExecutorInvokePoolSize2(t *testing.T) {
     result2, result2Ok := result2I.(int)
     if !result2Ok {
         t.Error("Incorrect type returned from Invoke.")
+    }
+    if result2 != 2 {
+        t.Error("Incorrect value returned from Invoke.")
+    }
+    executor.ShutDownGracefully()
+}
+
+func TestFixedSizeThreadPoolExecutorIntInvokePoolSize1(t *testing.T) {
+    executor := NewFixedSizeThreadPoolExecutor[int](1)
+    var atomicBool atomic.Bool
+    startChannel := make(chan byte)
+    result1Chan := executor.Invoke(func() int {
+        <-startChannel
+        atomicBool.Store(true)
+        return 1
+    })
+    startChannel <- byte(0)
+    result2Chan := executor.Invoke(func() int {
+        if !atomicBool.Load() {
+            t.Error("Task 2 should start after task 1 has completed.")
+        }
+        return 2
+    })
+    result1, result2 := <- result1Chan, <-result2Chan
+    if result1 != 1 {
+        t.Error("Incorrect value returned from Invoke.")
+    }
+    if result2 != 2 {
+        t.Error("Incorrect value returned from Invoke.")
+    }
+    executor.ShutDownGracefully()
+}
+
+func TestFixedSizeThreadPoolExecutorIntInvokePoolSize2(t *testing.T) {
+    executor := NewFixedSizeThreadPoolExecutor[int](2)
+    startChannel := make(chan byte)
+    result1Chan := executor.Invoke(func() int {
+        startChannel <- byte(0)
+        return 1
+    })
+    result2Chan := executor.Invoke(func() int {
+        <- startChannel
+        return 2
+    })
+    result1, result2 := <- result1Chan, <-result2Chan
+    if result1 != 1 {
+        t.Error("Incorrect value returned from Invoke.")
     }
     if result2 != 2 {
         t.Error("Incorrect value returned from Invoke.")

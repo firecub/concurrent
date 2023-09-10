@@ -1,28 +1,28 @@
 package concurrent
 
 //The interface that captures the basic function of an executor.
-type Executor interface {
+type Executor [T any] interface {
     //Submit submits a result-less function as a task.
     Submit(func())
     //Invoke submits a result-ful function as a task. It will return a channel from which the result can be obtained once the task has completed.
-    Invoke(func() interface{}) <-chan interface{}
+    Invoke(func() T) <-chan T
 }
 
-type work struct {
-    task func() interface{}
-    resultChannel chan<- interface{}
+type work [T any] struct {
+    task func() T
+    resultChannel chan<- T
 }
 
-type worker struct {
-    wChannel <-chan work
+type worker [T any] struct {
+    wChannel <-chan work [T]
     quitChannel chan byte
 }
 
-func newWorker(workChannel <-chan work) *worker {
-    return &worker{workChannel, make(chan byte, 1)}
+func newWorker [T any] (workChannel <-chan work [T]) *worker[T] {
+    return &worker[T]{workChannel, make(chan byte, 1)}
 }
 
-func (w *worker) start() {
+func (w *worker[T]) start() {
     go func() {
         for newWork, ok := <- w.wChannel; ok; newWork, ok = <- w.wChannel {
             if newWork.resultChannel == nil {
@@ -36,38 +36,38 @@ func (w *worker) start() {
 }
 
 //FixedSizeThreadPoolExecutor is an Executor which has a fixed number of threads.
-type FixedSizeThreadPoolExecutor struct {
-    workers []*worker
-    workChannel chan work
+type FixedSizeThreadPoolExecutor [T any] struct {
+    workers []*worker[T]
+    workChannel chan work[T]
 }
 
 //NewFixedSizeThreadPoolExecutor builds a new FixedSizeThreadPoolExecutor with the given thread pool size and returns a pointer to this new Executor.
-func NewFixedSizeThreadPoolExecutor(poolSize uint64) *FixedSizeThreadPoolExecutor {
-    workChannel := make(chan work, poolSize)
-    workers := make([]*worker, poolSize)
+func NewFixedSizeThreadPoolExecutor [T any] (poolSize uint64) *FixedSizeThreadPoolExecutor[T] {
+    workChannel := make(chan work[T], poolSize)
+    workers := make([]*worker[T], poolSize)
     for i, _ := range workers {
         w := newWorker(workChannel)
         workers[i] = w
         w.start()
     }
-    return &FixedSizeThreadPoolExecutor{workers, workChannel}
+    return &FixedSizeThreadPoolExecutor[T]{workers, workChannel}
 }
 
 //Submit submits a result-less function a task. This method will block until a thread becomes available. Calling this method on an Executor that has been shut down results in a run-time panic.
-func (e *FixedSizeThreadPoolExecutor) Submit(f func()) {
-    e.workChannel <- work{func() interface{} {f(); return nil}, nil}
+func (e *FixedSizeThreadPoolExecutor[T]) Submit(f func()) {
+    e.workChannel <- work[T]{func() T {f(); return *new(T)}, nil}
 }
 
 //Invoke submits a result-ful function a task. This method will block until a thread becomes available. Once a thread is available, this method will return a channel which will hold the result after the task has completed.
 //Calling this method on an Executor that has been shut down results in a run-time panic.
-func (e *FixedSizeThreadPoolExecutor) Invoke(f func() interface{}) <-chan interface{} {
-    resultChannel := make(chan interface{}, 1)
-    e.workChannel <- work{f, resultChannel}
+func (e *FixedSizeThreadPoolExecutor[T]) Invoke(f func() T) <-chan T {
+    resultChannel := make(chan T, 1)
+    e.workChannel <- work[T]{f, resultChannel}
     return resultChannel
 }
 
 //ShutDownGracefully shuts the Executor down gracefully by allowing all running tasks to complete and then all threads to stop.
-func (e *FixedSizeThreadPoolExecutor) ShutDownGracefully() {
+func (e *FixedSizeThreadPoolExecutor[T]) ShutDownGracefully() {
     close(e.workChannel)
     for _, w := range e.workers {
         <- w.quitChannel
